@@ -15,6 +15,7 @@
 package slowstrconv
 
 import (
+	"lukechampine.com/uint128"
 	"math"
 	"strconv"
 	"testing"
@@ -264,9 +265,10 @@ func TestParseOneThird(tt *testing.T) {
 	}
 
 	want := ParseFloatResult{
-		F16: 0x3555,
-		F32: 0x3EAA_AAAB,
-		F64: 0x3FD5_5555_5555_5555,
+		F16:  0x3555,
+		F32:  0x3EAA_AAAB,
+		F64:  0x3FD5_5555_5555_5555,
+		F128: uint128.New(0x5555_5555_5555_5555, 0x3FFD_5555_5555_5555),
 	}
 
 	if got != want {

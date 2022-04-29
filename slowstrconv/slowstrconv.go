@@ -25,6 +25,7 @@ package slowstrconv
 
 import (
 	"errors"
+	"lukechampine.com/uint128"
 	"strconv"
 )
 
@@ -37,16 +38,18 @@ import (
 // f16  6.55e+4    6.10e-5    5.96e-8
 // f32  3.40e+38   1.18e-38   1.40e-45
 // f64  1.80e+308  2.23e-308  4.94e-324
-const threshold = 350
+// f128 1.18e+4932 3.36e-4932 6.47e-4966
+const threshold = 5000
 
 var errInvalidNumber = errors.New("slowstrconv: invalid number")
 
 // ParseFloatResult contains half-, single- and double-precision floating point
 // approximations to a number.
 type ParseFloatResult struct {
-	F16 uint16 // 1 sign,  5 exponent (  -15 bias), 10 mantissa bits.
-	F32 uint32 // 1 sign,  8 exponent ( -127 bias), 23 mantissa bits.
-	F64 uint64 // 1 sign, 11 exponent (-1023 bias), 52 mantissa bits.
+	F16  uint16          // 1 sign,  5 exponent (  -15 bias), 10 mantissa bits.
+	F32  uint32          // 1 sign,  8 exponent ( -127 bias), 23 mantissa bits.
+	F64  uint64          // 1 sign, 11 exponent (-1023 bias), 52 mantissa bits.
+	F128 uint128.Uint128 // 1 sign, 15 exponent (-16383 bias), 112 mantissa bits.
 }
 
 // ParseFloatFromBytes takes input like "1.23e45" and returns the half-,
@@ -69,6 +72,7 @@ func ParseFloatFromBytes(s []byte) (ParseFloatResult, error) {
 		r.F16 |= 0x8000
 		r.F32 |= 0x8000_0000
 		r.F64 |= 0x8000_0000_0000_0000
+		r.F128.Hi |= 0x8000_0000_0000_0000
 	}
 	return r, nil
 }
@@ -85,15 +89,17 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 		// Handle zero and obvious extremes.
 		if (h.numDigits == 0) || (h.decimalPoint < -threshold) {
 			return ParseFloatResult{
-				F16: 0x0000,
-				F32: 0x0000_0000,
-				F64: 0x0000_0000_0000_0000,
+				F16:  0x0000,
+				F32:  0x0000_0000,
+				F64:  0x0000_0000_0000_0000,
+				F128: uint128.New(0x0000_0000_0000_0000, 0x0000_0000_0000_0000),
 			}, nil
 		} else if h.decimalPoint > +threshold {
 			return ParseFloatResult{
-				F16: 0x7C00,
-				F32: 0x7F80_0000,
-				F64: 0x7FF0_0000_0000_0000,
+				F16:  0x7C00,
+				F32:  0x7F80_0000,
+				F64:  0x7FF0_0000_0000_0000,
+				F128: uint128.New(0x0000_0000_0000_0000, 0x7FFF_0000_0000_0000),
 			}, nil
 		}
 
@@ -114,20 +120,23 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 	//
 	// Scale h to be in the range [1<<10 .. 1<<11].
 	h.mul2NTimes(10)
-	ret.F16 = uint16(h.pack(exp2, 5, 10))
+	ret.F16 = uint16(h.pack(exp2, 5, 10).Lo)
 	// Scale h to be in the range [1<<23 .. 1<<24].
 	h.mul2NTimes(23 - 10)
-	ret.F32 = uint32(h.pack(exp2, 8, 23))
+	ret.F32 = uint32(h.pack(exp2, 8, 23).Lo)
 	// Scale h to be in the range [1<<52 .. 1<<53].
 	h.mul2NTimes(52 - 23)
-	ret.F64 = uint64(h.pack(exp2, 11, 52))
+	ret.F64 = uint64(h.pack(exp2, 11, 52).Lo)
+	// Scale h to be in the range [1<<111 .. 1<<112].
+	h.mul2NTimes(112 - 52)
+	ret.F128 = h.pack(exp2, 15, 112)
 	return ret, nil
 }
 
 // hpdPrecision is somewhat arbitrary such that the highPrecisionDecimal.digits
 // array is sufficiently large (at least several hundred digits of precision)
 // and unsafe.Sizeof(highPrecisionDecimal{}) is an aesthetically pleasing 1024.
-const hpdPrecision = 1024 - 7
+const hpdPrecision = 16*1024 - 7
 
 // highPrecisionDecimal is a fixed precision floating point decimal number. It
 // has hundreds of digits of precision.
@@ -331,56 +340,56 @@ func (h *highPrecisionDecimal) trimTrailingZeroes() {
 	}
 }
 
-func (h *highPrecisionDecimal) roundedInteger() (n uint64) {
+func (h *highPrecisionDecimal) roundedInteger() (n uint128.Uint128) {
 	if h.decimalPoint < 0 {
-		return 0 // "Point zero something" rounds to zero.
+		return uint128.From64(0) // "Point zero something" rounds to zero.
 	}
 	i := int32(0)
 	for ; (i < h.decimalPoint) && (i < int32(h.numDigits)); i++ {
-		n = (10 * n) + uint64(h.digits[i])
+		n = n.Mul64(10).Add(uint128.From64(uint64(h.digits[i])))
 	}
 	for ; i < h.decimalPoint; i++ {
-		n = 10 * n
+		n = n.Mul64(10)
 	}
 
 	if i >= int32(h.numDigits) {
 		return n // No fractional part, so no rounding.
 	} else if c := h.digits[i]; c < 5 {
-		return n + 0 // Round down.
+		return n.Add64(0) // Round down.
 	} else if (c > 5) || h.truncated {
-		return n + 1 // Round up.
+		return n.Add64(1) // Round up.
 	}
 	for i++; i < int32(h.numDigits); i++ {
 		if h.digits[i] > 0 {
-			return n + 1 // Round up.
+			return n.Add64(1) // Round up.
 		}
 	}
 	// Exactly half-way between two integers: NNN.500000etc. Round to even.
-	if (n & 1) == 0 {
-		return n + 0 // Round down.
+	if (n.Lo & 1) == 0 {
+		return n.Add64(0) // Round down.
 	}
-	return n + 1 // Round up.
+	return n.Add64(1) // Round up.
 }
 
-func (h *highPrecisionDecimal) pack(exp2 int32, expBits uint32, manBits uint32) uint64 {
+func (h *highPrecisionDecimal) pack(exp2 int32, expBits uint32, manBits uint32) uint128.Uint128 {
 	exp2 += (int32(1) << (expBits - 1)) - 1
 	exp2Adjustment := int32(0)
 	man := h.roundedInteger()
-	if (man >> (manBits + 1)) > 0 {
-		man >>= 1
+	if man.Rsh(uint(manBits+1)).Cmp64(0) == 1 {
+		man = man.Rsh(1)
 		exp2Adjustment = 1
 	}
 	if e, eMax := exp2+exp2Adjustment, int32((1<<expBits)-1); e >= eMax {
-		return uint64(eMax) << manBits
+		return uint128.From64(uint64(eMax) << manBits)
 	} else if e > 0 {
-		man &= (uint64(1) << manBits) - 1
-		return (uint64(e) << manBits) | man
+		man = man.And(uint128.From64(1).Lsh(uint(manBits)).Sub64(1))
+		return uint128.From64(uint64(e)).Lsh(uint(manBits)).Or(man)
 	}
 
 	subnormal := *h
 	for exp2 <= 0 {
 		if (subnormal.numDigits == 0) || (subnormal.decimalPoint < 0) {
-			return 0
+			return uint128.From64(0)
 		}
 		subnormal.div2()
 		exp2++
