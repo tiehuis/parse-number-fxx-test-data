@@ -1,20 +1,20 @@
 # `parse_number_fxx` Test Data
 
 This repository contains test data for `parse_number_fxx` implementations (for
-`fxx` being `f16`, `f32` or `f64`), also known as `StringToDouble`, `strtod`,
-`atof`, etc. These convert from an ASCII string to a 16-, 32- or 64-bit value
-(IEEE 754 half-, single- or double-precision floating point).
+`fxx` being `f16`, `f32`, `f64` or `f128`), also known as `StringToDouble`, `strtod`,
+`atof`, etc. These convert from an ASCII string to a 16-, 32-, 64- or 128-bit value
+(IEEE 754 half-, single-, double-, quad-precision floating point).
 
 Most of the `data/*.txt` files were derived by running
 `script/extract-numbery-strings.go` on various repositories or zip files,
 listed further below. Their contents look like:
 
-    3C00 3F800000 3FF0000000000000 1
-    3D00 3FA00000 3FF4000000000000 1.25
-    3D9A 3FB33333 3FF6666666666666 1.4
-    57B7 42F6E979 405EDD2F1A9FBE77 123.456
-    622A 44454000 4088A80000000000 789
-    7C00 7F800000 7FF0000000000000 123.456e789
+    3C00 3F800000 3FF0000000000000 3FFF0000000000000000000000000000 1
+    3D00 3FA00000 3FF4000000000000 3FFF4000000000000000000000000000 1.25
+    3D9A 3FB33333 3FF6666666666666 3FFF6666666666666666666666666666 1.4
+    57B7 42F6E979 405EDD2F1A9FBE77 4005EDD2F1A9FBE76C8B4395810624DD 123.456
+    622A 44454000 4088A80000000000 40088A80000000000000000000000000 789
+    7C00 7F800000 7FF0000000000000 4A42EE42011D20C6191B511E89BA3506 123.456e789
 
 For example, parsing `"1.4"` as a `float32` gives the bits `0x3FB33333`.
 
@@ -22,11 +22,11 @@ In this case, the final line's `float16`, `float32` and `float64` values are
 all infinity. The largest finite `float{16,32,64}` values are approximately
 `6.55e+4`, `3.40e+38` and `1.80e+308`.
 
-For each line of these `data/*.txt` files, the `f16`, `f32` and `f64`
+For each line of these `data/*.txt` files, the `f16`, `f32`, `f64` and `f128`
 hexadecimal digits and the ASCII string subslices are:
 
-- When column indexes start at 0: `[0..4]`, `[5..13]`, `[14..30]` and `[31..]`.
-- When column indexes start at 1: `[1..5]`, `[6..14]`, `[15..31]` and `[32..]`.
+- When column indexes start at 0: `[0..4]`, `[5..13]`, `[14..30]`, `[31..63]` and `[64..]`.
+- When column indexes start at 1: `[1..5]`, `[6..14]`, `[15..31]`, `[32..64]` and `[65..]`.
 
 The first half (the high 16 bits) of the `f32` hexadecimal digits are also
 known as the `bfloat16` format.

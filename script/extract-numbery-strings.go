@@ -14,6 +14,7 @@
 
 // ----------------
 
+//go:build ignore
 // +build ignore
 
 package main
@@ -23,15 +24,15 @@ package main
 // leading '+' or '-' is omitted.
 //
 // It prints one number per line, with the string preceded by the 16-bit,
-// 32-bit and 64-bit (half-, single- and double-precision) IEEE floating point
+// 32-bit, 64-bit and 128-bit (half-, single-, double- and quad- precision) IEEE floating point
 // representation of the number. For example:
 //
-// 3C00 3F800000 3FF0000000000000 1
-// 3D00 3FA00000 3FF4000000000000 1.25
-// 3D9A 3FB33333 3FF6666666666666 1.4
-// 57B7 42F6E979 405EDD2F1A9FBE77 123.456
-// 622A 44454000 4088A80000000000 789
-// 7C00 7F800000 7FF0000000000000 123.456e789
+// 3C00 3F800000 3FF0000000000000 3FFF0000000000000000000000000000 1
+// 3D00 3FA00000 3FF4000000000000 3FFF4000000000000000000000000000 1.25
+// 3D9A 3FB33333 3FF6666666666666 3FFF6666666666666666666666666666 1.4
+// 57B7 42F6E979 405EDD2F1A9FBE77 4005EDD2F1A9FBE76C8B4395810624DD 123.456
+// 622A 44454000 4088A80000000000 40088A80000000000000000000000000 789
+// 7C00 7F800000 7FF0000000000000 4A42EE42011D20C6191B511E89BA3506 123.456e789
 //
 // For example, parsing "1.4" as a float32 gives the bits 0x3FB33333.
 //
@@ -170,7 +171,7 @@ func printSortedNumbers() {
 	for n := range numbers {
 		if f, err := slowstrconv.ParseFloatFromBytes([]byte(n)); err == nil {
 			sortedNumbers = append(sortedNumbers,
-				fmt.Sprintf("%04X %08X %016X %s", f.F16, f.F32, f.F64, n))
+				fmt.Sprintf("%04X %08X %016X %016X%016X %s", f.F16, f.F32, f.F64, f.F128.Hi, f.F128.Lo, n))
 		}
 	}
 	sort.Strings(sortedNumbers)

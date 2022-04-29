@@ -14,6 +14,7 @@
 
 // ----------------
 
+//go:build ignore
 // +build ignore
 
 package main
@@ -65,7 +66,7 @@ func do(filename string) error {
 			continue
 		}
 
-		// line looks like "1616 32323232 6464646464646464 ssssss".
+		// line looks like "1616 32323232 6464646464646464 12812812812812812812812812812812 ssssss".
 		wantF32 := uint32(0)
 		for _, c := range line[5:13] {
 			wantF32 = wantF32<<4 | uint32(hex[c])
@@ -74,7 +75,7 @@ func do(filename string) error {
 		for _, c := range line[14:30] {
 			wantF64 = wantF64<<4 | uint64(hex[c])
 		}
-		src := string(line[31:])
+		src := string(line[64:])
 
 		if parseF32, err := strconv.ParseFloat(src, 32); isFatal(err) {
 			return err
