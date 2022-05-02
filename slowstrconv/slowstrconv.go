@@ -25,8 +25,9 @@ package slowstrconv
 
 import (
 	"errors"
-	"lukechampine.com/uint128"
 	"strconv"
+
+	"lukechampine.com/uint128"
 )
 
 // threshold is such that 1e+threshold and 1e-threshold are effectively
@@ -39,7 +40,8 @@ import (
 // f32  3.40e+38   1.18e-38   1.40e-45
 // f64  1.80e+308  2.23e-308  4.94e-324
 // f128 1.18e+4932 3.36e-4932 6.47e-4966
-const threshold = 5000
+const upperThreshold = 4933
+const lowerThreshold = -4967
 
 var errInvalidNumber = errors.New("slowstrconv: invalid number")
 
@@ -87,14 +89,14 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 	exp2 := int32(0)
 	for {
 		// Handle zero and obvious extremes.
-		if (h.numDigits == 0) || (h.decimalPoint < -threshold) {
+		if (h.numDigits == 0) || (h.decimalPoint < lowerThreshold) {
 			return ParseFloatResult{
 				F16:  0x0000,
 				F32:  0x0000_0000,
 				F64:  0x0000_0000_0000_0000,
 				F128: uint128.New(0x0000_0000_0000_0000, 0x0000_0000_0000_0000),
 			}, nil
-		} else if h.decimalPoint > +threshold {
+		} else if h.decimalPoint > upperThreshold {
 			return ParseFloatResult{
 				F16:  0x7C00,
 				F32:  0x7F80_0000,
@@ -136,7 +138,7 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 // hpdPrecision is somewhat arbitrary such that the highPrecisionDecimal.digits
 // array is sufficiently large (at least several hundred digits of precision)
 // and unsafe.Sizeof(highPrecisionDecimal{}) is an aesthetically pleasing 1024.
-const hpdPrecision = 16*1024 - 7
+const hpdPrecision = 64*1024 - 7
 
 // highPrecisionDecimal is a fixed precision floating point decimal number. It
 // has hundreds of digits of precision.
@@ -231,7 +233,7 @@ func (h *highPrecisionDecimal) parse(s []byte) (ok bool) {
 			if (s[i] < '0') || ('9' < s[i]) {
 				return false
 			}
-			if e < (30 * threshold) {
+			if e < (30 * upperThreshold) {
 				e = e*10 + int32(s[i]-'0')
 			}
 		}
@@ -261,7 +263,7 @@ func (h *highPrecisionDecimal) div2() {
 		acc = (10 * uint32(h.digits[0])) + uint32(h.digits[1])
 		rx = 2
 		h.decimalPoint--
-		if h.decimalPoint < -threshold {
+		if h.decimalPoint < lowerThreshold {
 			h.numDigits = 0
 			h.decimalPoint = 0
 			h.truncated = false
