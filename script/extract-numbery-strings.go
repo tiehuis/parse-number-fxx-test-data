@@ -171,7 +171,7 @@ func printSortedNumbers() {
 	for n := range numbers {
 		if f, err := slowstrconv.ParseFloatFromBytes([]byte(n)); err == nil {
 			sortedNumbers = append(sortedNumbers,
-				fmt.Sprintf("%04X %08X %016X %04x%016x %016X%016X %s", f.F16, f.F32, f.F64, f.F80.Hi, f.F80.Lo, f.F128.Hi, f.F128.Lo, n))
+				fmt.Sprintf("%04X %08X %016X %04X%016X %016X%016X %s", f.F16, f.F32, f.F64, f.F80.Hi, f.F80.Lo, f.F128.Hi, f.F128.Lo, n))
 		}
 	}
 	sort.Strings(sortedNumbers)
