@@ -39,6 +39,7 @@ import (
 // f16  6.55e+4    6.10e-5    5.96e-8
 // f32  3.40e+38   1.18e-38   1.40e-45
 // f64  1.80e+308  2.23e-308  4.94e-324
+// f80  1.18e+4932 3.36e-4932 3.65e-4951
 // f128 1.18e+4932 3.36e-4932 6.47e-4966
 const upperThreshold = 4933
 const lowerThreshold = -4967
@@ -51,6 +52,7 @@ type ParseFloatResult struct {
 	F16  uint16          // 1 sign,  5 exponent (  -15 bias), 10 mantissa bits.
 	F32  uint32          // 1 sign,  8 exponent ( -127 bias), 23 mantissa bits.
 	F64  uint64          // 1 sign, 11 exponent (-1023 bias), 52 mantissa bits.
+	F80  uint128.Uint128 // 1 sign, 15 exponent (-16383 bias), 63 mantissa bits (explicit integer bit).
 	F128 uint128.Uint128 // 1 sign, 15 exponent (-16383 bias), 112 mantissa bits.
 }
 
@@ -74,6 +76,7 @@ func ParseFloatFromBytes(s []byte) (ParseFloatResult, error) {
 		r.F16 |= 0x8000
 		r.F32 |= 0x8000_0000
 		r.F64 |= 0x8000_0000_0000_0000
+		r.F80.Hi |= 0x8000
 		r.F128.Hi |= 0x8000_0000_0000_0000
 	}
 	return r, nil
@@ -94,6 +97,7 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 				F16:  0x0000,
 				F32:  0x0000_0000,
 				F64:  0x0000_0000_0000_0000,
+				F80:  uint128.New(0x0000_0000_0000_0000, 0x0000_0000_0000_0000),
 				F128: uint128.New(0x0000_0000_0000_0000, 0x0000_0000_0000_0000),
 			}, nil
 		} else if h.decimalPoint > upperThreshold {
@@ -101,6 +105,7 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 				F16:  0x7C00,
 				F32:  0x7F80_0000,
 				F64:  0x7FF0_0000_0000_0000,
+				F80:  uint128.New(0x8000_0000_0000_0000, 0x7FFF),
 				F128: uint128.New(0x0000_0000_0000_0000, 0x7FFF_0000_0000_0000),
 			}, nil
 		}
@@ -129,8 +134,11 @@ func parseFloatFromBytes(s []byte) (ret ParseFloatResult, retErr error) {
 	// Scale h to be in the range [1<<52 .. 1<<53].
 	h.mul2NTimes(52 - 23)
 	ret.F64 = uint64(h.pack(exp2, 11, 52).Lo)
+	// Scale h to be in the range [1<<63 .. 1<<64].
+	h.mul2NTimes(63 - 52)
+	ret.F80 = explicitIntegerBit(h.pack(exp2, 15, 63), 63)
 	// Scale h to be in the range [1<<111 .. 1<<112].
-	h.mul2NTimes(112 - 52)
+	h.mul2NTimes(112 - 63)
 	ret.F128 = h.pack(exp2, 15, 112)
 	return ret, nil
 }
@@ -373,6 +381,15 @@ func (h *highPrecisionDecimal) roundedInteger() (n uint128.Uint128) {
 	return n.Add64(1) // Round up.
 }
 
+func explicitIntegerBit(n uint128.Uint128, manBits uint32) uint128.Uint128 {
+	e := n.Rsh(uint(manBits))
+	man := n.And(uint128.From64(1).Lsh(uint(manBits)).Sub64(1))
+	if e.Cmp64(0) != 0 {
+		man = man.Or(uint128.From64(1).Lsh(uint(manBits)))
+	}
+	return e.Lsh(uint(manBits + 1)).Or(man)
+}
+
 func (h *highPrecisionDecimal) pack(exp2 int32, expBits uint32, manBits uint32) uint128.Uint128 {
 	exp2 += (int32(1) << (expBits - 1)) - 1
 	exp2Adjustment := int32(0)
@@ -382,7 +399,7 @@ func (h *highPrecisionDecimal) pack(exp2 int32, expBits uint32, manBits uint32) 
 		exp2Adjustment = 1
 	}
 	if e, eMax := exp2+exp2Adjustment, int32((1<<expBits)-1); e >= eMax {
-		return uint128.From64(uint64(eMax) << manBits)
+		return uint128.From64(uint64(eMax)).Lsh(uint(manBits))
 	} else if e > 0 {
 		man = man.And(uint128.From64(1).Lsh(uint(manBits)).Sub64(1))
 		return uint128.From64(uint64(e)).Lsh(uint(manBits)).Or(man)

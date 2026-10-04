@@ -15,10 +15,11 @@
 package slowstrconv
 
 import (
-	"lukechampine.com/uint128"
 	"math"
 	"strconv"
 	"testing"
+
+	"lukechampine.com/uint128"
 )
 
 func TestParseFloatFromBytes(tt *testing.T) {
@@ -268,6 +269,7 @@ func TestParseOneThird(tt *testing.T) {
 		F16:  0x3555,
 		F32:  0x3EAA_AAAB,
 		F64:  0x3FD5_5555_5555_5555,
+		F80:  uint128.New(0xAAAA_AAAA_AAAA_AAAB, 0x3FFD),
 		F128: uint128.New(0x5555_5555_5555_5555, 0x3FFD_5555_5555_5555),
 	}
 
